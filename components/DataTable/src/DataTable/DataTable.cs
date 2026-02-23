@@ -146,12 +146,22 @@ public partial class DataTable : Panel
             {
                 --starRemains;
 
-                // If the column width needs to be calculated, get the proportion of the remained space.
-                double width = starUnit * column.DesiredWidth.Value;
-                //Debug.WriteLine($"  Column[{i}] ({column.DesiredWidth}) width is adjusted to: {width}");
+                double width;
+                if (double.IsFinite(starUnit))
+                {
+                    // If the column width needs to be calculated, get the proportion of the remained space.
+                    width = starUnit * column.DesiredWidth.Value;
 
-                // If availableSize.Width is infinite, the column will also get infinite available width.
-                column.Measure(new Size(width, availableSize.Height));
+                    column.Measure(new Size(width, availableSize.Height));
+                }
+                else
+                {
+                    // If availableSize.Width is infinite, use DesiredSize.Width of the column.
+                    column.Measure(new Size(double.PositiveInfinity, availableSize.Height));
+
+                    width = column.DesiredSize.Width;
+                }
+                //Debug.WriteLine($"  Column[{i}] ({column.DesiredWidth}) width is adjusted to: {width}");
 
                 // Store the calculated column width as a negative value.
                 column.CurrentWidth = -width;
