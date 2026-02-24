@@ -147,7 +147,7 @@ public partial class DataTable : Panel
                 --starRemains;
 
                 double width;
-                if (double.IsFinite(starUnit))
+                if (!double.IsInfinity(starUnit) && !double.IsNaN(starUnit))
                 {
                     // If the column width needs to be calculated, get the proportion of the remained space.
                     width = starUnit * column.DesiredWidth.Value;
