@@ -54,6 +54,7 @@ public partial class DataTable : Panel
         double maxHeight = 0;
 
         bool invokeRowsMeasures = false;
+        bool invokeRowsArranges = false;
 
         for (int i = 0; i < Children.Count; i++)
         {
@@ -136,6 +137,7 @@ public partial class DataTable : Panel
             return new Size(0, 0);
 
         double starUnit = Math.Max(0, availableSize.Width - totalWidth) / starAmounts;
+
         for (int i = 0; starRemains != 0; i++)
         {
             var column = Children[i] as DataColumn;
@@ -147,18 +149,22 @@ public partial class DataTable : Panel
                 --starRemains;
 
                 double width;
-                if (!double.IsInfinity(starUnit) && !double.IsNaN(starUnit))
+                if (!double.IsInfinity(availableSize.Width))
                 {
-                    // If the column width needs to be calculated, get the proportion of the remained space.
+                    // If availableSize.Width is finite, calculate the proportional width.
                     width = starUnit * column.DesiredWidth.Value;
 
                     column.Measure(new Size(width, availableSize.Height));
                 }
                 else
                 {
-                    // If availableSize.Width is infinite, use DesiredSize.Width of the column.
+                    // If availableSize.Width is infinite, the acutal width
+                    // of the column will be determined in Arrange phase..
+                    invokeRowsArranges = true;
+
                     column.Measure(new Size(double.PositiveInfinity, availableSize.Height));
 
+                    // Just save the _natural_ column width, but it's really unused.
                     width = column.DesiredSize.Width;
                 }
                 //Debug.WriteLine($"  Column[{i}] ({column.DesiredWidth}) width is adjusted to: {width}");
@@ -176,6 +182,11 @@ public partial class DataTable : Panel
             foreach (var row in Rows)
                 row.InvalidateMeasure();
         }
+        else if (invokeRowsArranges)
+        {
+            foreach (var row in Rows)
+                row.InvalidateArrange();
+        }
 
         return new Size(totalWidth, maxHeight);
     }
@@ -185,9 +196,39 @@ public partial class DataTable : Panel
     {
         //Debug.WriteLine($"DataTable.ArrangeOverride");
 
-        double columnSpacing = ColumnSpacing;
-        double x = double.NaN;
+        int starRemains = 0;
+        double starAmounts = 0;
 
+        double columnSpacing = ColumnSpacing;
+
+        double totalWidth = double.NaN;
+
+        for (int i = 0; i < Children.Count; i++)
+        {
+            // We only need to measure children that are visible
+            var column = Children[i] as DataColumn;
+            if (column?.Visibility != Visibility.Visible)
+                continue;
+
+            if (double.IsNaN(totalWidth))
+                totalWidth = 0;
+            else
+                totalWidth += columnSpacing;
+
+            if (column.IsStarProportion)
+            {
+                ++starRemains;
+                starAmounts += column.DesiredWidth.Value;
+            }
+            else
+            {
+                totalWidth += column.ActualCurrentWidth;
+            }
+        }
+
+        double starUnit = Math.Max(0, finalSize.Width - totalWidth) / starAmounts;
+
+        double x = double.NaN;
         for (int i = 0; i < Children.Count; i++)
         {
             // We only need to measure children that are visible
@@ -201,6 +242,14 @@ public partial class DataTable : Panel
                 x += columnSpacing;
 
             double width = column.ActualCurrentWidth;
+
+            if (column.IsStarProportion && double.IsFinite(starUnit))
+            {
+                // Save the actual star column width.
+                width = starUnit * column.DesiredWidth.Value;
+
+                column.CurrentWidth = -width;
+            }
 
             column.Arrange(new Rect(x, 0, width, finalSize.Height));
 
