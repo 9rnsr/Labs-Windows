@@ -18,26 +18,25 @@ public partial class DataColumn : ContentControl
 
     /// <summary>
     /// Gets or sets the internal calculated or manually set width of this column.
-    /// - Positive value: this column has a fixed or manually set width.
-    /// - Negative value: this column has a calculated width which is derived from DesiredWidth.
-    /// - NaN: this column should have a calculated width which isn't set yet.
+    /// NaN means that the column size is no yet calculated.
     /// </summary>
     internal double CurrentWidth { get; set; } = double.NaN;
 
     /// <summary>
     /// Gets the internal calculated or manually set width of this column, as a positive value.
     /// </summary>
-    internal double ActualCurrentWidth => double.IsNaN(CurrentWidth) ? 0 : Math.Abs(CurrentWidth);
+    internal double ActualCurrentWidth => double.IsNaN(CurrentWidth) ? 0 : CurrentWidth;
 
     internal bool IsAbsolute => DesiredWidth.IsAbsolute;
 
     internal bool IsAuto => DesiredWidth.IsAuto;
 
-    internal bool IsAutoFit => DesiredWidth.IsAuto && !(CurrentWidth > 0);
-
     internal bool IsStar => DesiredWidth.IsStar;
 
-    internal bool IsStarProportion => DesiredWidth.IsStar && !(CurrentWidth > 0);
+    /// <summary>
+    /// Returns <see langword="true"/> if the column width is fixed with the manual adjustment.
+    /// </summary>
+    internal bool IsFixed { get; set; }
 
     /// <summary>
     /// Gets or sets whether the column can be resized by the user.
@@ -76,11 +75,19 @@ public partial class DataColumn : ContentControl
         {
             if (column.DesiredWidth is { GridUnitType: GridUnitType.Pixel, Value: var value })
             {
+                column.IsFixed = true;
                 column.CurrentWidth = value;
+            }
+            else if (column.DesiredWidth is { GridUnitType: GridUnitType.Star, Value: 0 })
+            {
+                // Handle DesiredWidth="0*" as fixed zero width column.
+                column.IsFixed = true;
+                column.CurrentWidth = 0;
             }
             else
             {
                 // Reset the manual adjusted width.
+                column.IsFixed = false;
                 column.CurrentWidth = double.NaN;
             }
 

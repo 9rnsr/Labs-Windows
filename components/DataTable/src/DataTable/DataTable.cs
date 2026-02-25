@@ -2,8 +2,6 @@
 // The .NET Foundation licenses this file to you under the MIT license.
 // See the LICENSE file in the project root for more information.
 
-using System.Runtime.CompilerServices;
-
 namespace CommunityToolkit.WinUI.Controls;
 
 /// <summary>
@@ -45,13 +43,12 @@ public partial class DataTable : Panel
     protected override Size MeasureOverride(Size availableSize)
     {
         //Debug.WriteLine($"DataTable.MeasureOverride");
-
-        int starRemains = 0;
-        double starAmounts = 0;
-
         double columnSpacing = ColumnSpacing;
         double totalWidth = double.NaN;
         double maxHeight = 0;
+
+        int starRemains = 0;
+        double starAmounts = 0;
 
         bool invokeRowsMeasures = false;
         bool invokeRowsArranges = false;
@@ -70,63 +67,44 @@ public partial class DataTable : Panel
 
             double width = column.ActualCurrentWidth;
 
-            if (column.IsStarProportion)
+            if (column.IsFixed)
             {
-                ++starRemains;
-                starAmounts += column.DesiredWidth.Value;
-                continue;
-            }
-            else if (column.IsStar)
-            {
-                starAmounts += column.DesiredWidth.Value;
                 //Debug.WriteLine($"  Column[{i}] ({column.DesiredWidth}) width is fixed to: {width}");
 
                 // If availableSize.Width is infinite, the column will also get infinite available width.
                 column.Measure(new Size(width, availableSize.Height));
             }
-            else if (column.IsAbsolute)
+            else if (column.IsStar)
             {
-                // column.CurrentWidth is already set in DesiredWidth_PropertyChanged.
-                //Debug.WriteLine($"  Column[{i}] ({column.DesiredWidth}) width is fixed to: {width}");
-
-                column.Measure(new Size(width, availableSize.Height));
+                ++starRemains;
+                starAmounts += column.DesiredWidth.Value;
+                continue;
             }
             else // (column.IsAuto)
             {
-                if (column.IsAutoFit)
-                {
-                    // Calculate the best width of the header content.
-                    column.Measure(new Size(double.PositiveInfinity, availableSize.Height));
+                // Get the best-fit width of the header content.
+                column.Measure(new Size(double.PositiveInfinity, availableSize.Height));
 
-                    width = column.DesiredSize.Width;
-                    foreach (var row in Rows)
+                width = column.DesiredSize.Width;
+                foreach (var row in Rows)
+                {
+                    if (i < row.Children.Count)
                     {
-                        if (i < row.Children.Count)
-                        {
-                            var child = row.Children[i];
+                        var child = row.Children[i];
 
-                            var childWidth = child.DesiredSize.Width;
-                            if (i == 0)
-                                childWidth += row.TreePadding;
+                        var childWidth = child.DesiredSize.Width;
+                        if (i == 0)
+                            childWidth += row.TreePadding;
 
-                            width = Math.Max(width, childWidth);
-                        }
+                        width = Math.Max(width, childWidth);
                     }
-                    //Debug.WriteLine($"  Column[{i}] ({column.DesiredWidth}) width is adjusted to: {width}");
-
-                    // The column width of the corresponding cell in each row
-                    // is taken into account in the next layout pass.
-                    invokeRowsMeasures = true;
-
-                    // Store the calculated column width as a negative value.
-                    column.CurrentWidth = -width;
                 }
-                else
-                {
-                    //Debug.WriteLine($"  Column[{i}] ({column.DesiredWidth}) width is fixed to: {width}");
+                //Debug.WriteLine($"  Column[{i}] ({column.DesiredWidth}) width is adjusted to: {width}");
+                column.CurrentWidth = width;
 
-                    column.Measure(new Size(width, availableSize.Height));
-                }
+                // The column width of the corresponding cell in each row is taken into account
+                // in the next layout pass.
+                invokeRowsMeasures = true;
             }
 
             totalWidth += width;
@@ -136,41 +114,51 @@ public partial class DataTable : Panel
         if (double.IsNaN(totalWidth))
             return new Size(0, 0);
 
-        double starUnit = Math.Max(0, availableSize.Width - totalWidth) / starAmounts;
-
-        for (int i = 0; starRemains != 0; i++)
+        if (starRemains > 0)
         {
-            var column = Children[i] as DataColumn;
-            if (column?.Visibility != Visibility.Visible)
-                continue;
-
-            if (column.IsStarProportion)
+            Debug.Assert(starAmounts > 0);
+            double starUnit;
+            if (double.IsInfinity(availableSize.Width))
             {
+                starUnit = double.NaN;
+
+                // If availableSize.Width is infinite, the size calculation will be deferred
+                // until the Arrange pass.
+                invokeRowsArranges = true;
+            }
+            else
+            {
+                starUnit = Math.Max(0, availableSize.Width - totalWidth) / starAmounts;
+            }
+
+            for (int i = 0; starRemains != 0; i++)
+            {
+                var column = Children[i] as DataColumn;
+                if (column?.Visibility != Visibility.Visible)
+                    continue;
+
+                if (column.IsFixed || !column.IsStar)
+                    continue;
+
                 --starRemains;
 
                 double width;
-                if (!double.IsInfinity(availableSize.Width))
+                if (double.IsNaN(starUnit))
                 {
-                    // If availableSize.Width is finite, calculate the proportional width.
+                    // Just get and store the natural size.
+                    column.Measure(new Size(double.PositiveInfinity, availableSize.Height));
+
+                    width = column.DesiredSize.Width;
+                }
+                else
+                {
+                    // Get the proportion of the remaining space.
                     width = starUnit * column.DesiredWidth.Value;
 
                     column.Measure(new Size(width, availableSize.Height));
                 }
-                else
-                {
-                    // If availableSize.Width is infinite, the acutal width
-                    // of the column will be determined in Arrange phase..
-                    invokeRowsArranges = true;
-
-                    column.Measure(new Size(double.PositiveInfinity, availableSize.Height));
-
-                    // Just save the _natural_ column width, but it's really unused.
-                    width = column.DesiredSize.Width;
-                }
                 //Debug.WriteLine($"  Column[{i}] ({column.DesiredWidth}) width is adjusted to: {width}");
-
-                // Store the calculated column width as a negative value.
-                column.CurrentWidth = -width;
+                column.CurrentWidth = width;
 
                 totalWidth += width;
                 maxHeight = Math.Max(maxHeight, column.DesiredSize.Height);
@@ -195,13 +183,11 @@ public partial class DataTable : Panel
     protected override Size ArrangeOverride(Size finalSize)
     {
         //Debug.WriteLine($"DataTable.ArrangeOverride");
+        double columnSpacing = ColumnSpacing;
+        double totalWidth = double.NaN;
 
         int starRemains = 0;
         double starAmounts = 0;
-
-        double columnSpacing = ColumnSpacing;
-
-        double totalWidth = double.NaN;
 
         for (int i = 0; i < Children.Count; i++)
         {
@@ -215,17 +201,18 @@ public partial class DataTable : Panel
             else
                 totalWidth += columnSpacing;
 
-            if (column.IsStarProportion)
+            if (column.IsFixed || !column.IsStar)
+            {
+                totalWidth += column.ActualCurrentWidth;
+            }
+            else
             {
                 ++starRemains;
                 starAmounts += column.DesiredWidth.Value;
             }
-            else
-            {
-                totalWidth += column.ActualCurrentWidth;
-            }
         }
 
+        Debug.Assert(starRemains == 0 || starAmounts > 0);
         double starUnit = Math.Max(0, finalSize.Width - totalWidth) / starAmounts;
 
         double x = double.NaN;
@@ -241,14 +228,17 @@ public partial class DataTable : Panel
             else
                 x += columnSpacing;
 
-            double width = column.ActualCurrentWidth;
-
-            if (column.IsStarProportion && double.IsFinite(starUnit))
+            double width;
+            if (column.IsFixed || !column.IsStar)
             {
-                // Save the actual star column width.
+                width = column.ActualCurrentWidth;
+            }
+            else
+            {
                 width = starUnit * column.DesiredWidth.Value;
 
-                column.CurrentWidth = -width;
+                // Store the actual star column width.
+                column.CurrentWidth = width;
             }
 
             column.Arrange(new Rect(x, 0, width, finalSize.Height));

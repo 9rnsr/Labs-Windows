@@ -129,7 +129,7 @@ public partial class DataRow : Panel
 
                 double width = column.ActualCurrentWidth;
 
-                if (column.IsAutoFit)
+                if (column.IsAuto && !column.IsFixed)
                 {
                     // We should get the *required* width from the child.
                     child.Measure(new Size(double.PositiveInfinity, availableSize.Height));
