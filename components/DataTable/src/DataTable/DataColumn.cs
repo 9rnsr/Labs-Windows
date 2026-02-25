@@ -78,6 +78,11 @@ public partial class DataColumn : ContentControl
             {
                 column.CurrentWidth = value;
             }
+            else
+            {
+                // Reset the manual adjusted width.
+                column.CurrentWidth = double.NaN;
+            }
 
             // Request to measure for the IsAutoFit or IsStarProportion columns.
             column.DataTable?.InvalidateMeasure();
